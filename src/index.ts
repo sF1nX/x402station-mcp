@@ -211,7 +211,7 @@ async function callFree(
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "x402station",
-  version: "1.0.7",
+  version: "1.0.8",
 });
 
 server.registerTool(
@@ -274,6 +274,45 @@ server.registerTool(
   async () => {
     try {
       const text = await callPaid("/api/v1/catalog/decoys", {});
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return {
+        isError: true,
+        content: [{ type: "text" as const, text: (err as Error).message }],
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "whats_new",
+  {
+    title: "Catalog diff polling — added / removed endpoints since `since`",
+    description:
+      "Polling-friendly catalog diff. Body { since?, limit? } (default since=now-24h, limit=200, max 500). Returns added_endpoints[] (first_seen_at >= since AND is_active=true), removed_endpoints[] (flipped to is_active=false since), service-level counts, polls_in_window, and current active totals. Cheap ($0.001 USDC) so hourly polling stays under $1/month — perfect for aggregator agents that need a fresh delta without re-pulling the whole catalog. Internal ingest cron runs every 5 min, so polling more often than that returns identical data.",
+    inputSchema: {
+      since: z
+        .string()
+        .datetime()
+        .optional()
+        .describe(
+          "ISO 8601 timestamp. Default = now() - 24h. Cannot be older than 30 days or in the future.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .optional()
+        .describe("Per-list cap (1..500, default 200). Applied independently to added_endpoints and removed_endpoints."),
+    },
+  },
+  async ({ since, limit }) => {
+    try {
+      const body: Record<string, unknown> = {};
+      if (since) body.since = since;
+      if (limit !== undefined) body.limit = limit;
+      const text = await callPaid("/api/v1/whats-new", body);
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return {
