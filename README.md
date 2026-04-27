@@ -109,6 +109,12 @@ By design, the moat-critical parts of x402station — the probe scheduler, the S
 - npm: <https://www.npmjs.com/package/x402station-mcp>
 - MCP Registry: <https://registry.modelcontextprotocol.io/v0/servers/io.github.sF1nX/x402station>
 
+## Contact
+
+- General + commercial: <hello@x402station.io>
+- Bug reports / questions: <https://github.com/sF1nX/x402station-mcp/issues>
+- Security disclosures (RFC 9116): <https://x402station.io/.well-known/security.txt>
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
