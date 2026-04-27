@@ -1,0 +1,56 @@
+{
+  "name": "x402station-mcp",
+  "version": "1.0.4",
+  "mcpName": "io.github.sF1nX/x402station",
+  "description": "MCP adapter for x402station — gives any agent (Claude Code / Cursor / Windsurf / Continue) preflight + forensics + decoy-blacklist + watch-subscription tools for safely paying x402 endpoints.",
+  "type": "module",
+  "bin": {
+    "x402station-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@x402/evm": "^2.10.0",
+    "@x402/fetch": "^2.10.0",
+    "viem": "^2.48.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "x402",
+    "mcp",
+    "model-context-protocol",
+    "agent",
+    "oracle",
+    "preflight",
+    "decoy-detection",
+    "agentic-commerce",
+    "x402station"
+  ],
+  "author": "x402station",
+  "license": "MIT",
+  "homepage": "https://x402station.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sF1nX/x402station-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sF1nX/x402station-mcp/issues"
+  }
+}
