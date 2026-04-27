@@ -41,14 +41,19 @@ function resolveBaseUrl(raw: string | undefined): string {
     throw new Error(`X402STATION_BASE_URL is not a valid URL: ${value}`);
   }
 
-  // u.host (NOT u.hostname) so a non-default port doesn't bypass the
-  // allowlist — `https://x402station.io:9999`.hostname === "x402station.io"
-  // would otherwise PASS the canonical check. URL.host is "host:port" for
-  // explicit ports and just "host" when the port matches the scheme default.
-  // Audit 2026-04-26 M-2.
+  // Canonical: `u.host` (NOT `u.hostname`) so a non-default port doesn't
+  // bypass the allowlist — `https://x402station.io:9999`.hostname is
+  // "x402station.io" but `.host` is "x402station.io:9999". Audit
+  // 2026-04-26 M-2.
   const canonical = u.host === "x402station.io" && u.protocol === "https:";
+  // localDev: `u.hostname` (NOT `u.host` + `startsWith`) so an attacker
+  // host like `localhost.attacker.com` or `127.0.0.1.evil.example` can't
+  // PASS the loopback check via prefix match. WHATWG `URL.hostname`
+  // returns the bracketed form `[::1]` for IPv6 literals (RFC 2732),
+  // so exact-match against `[::1]` is correct. CodeRabbit (Mastra PR
+  // 2026-04-27).
   const localDev =
-    (u.host.startsWith("localhost") || u.host.startsWith("127.0.0.1")) &&
+    (u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]") &&
     (u.protocol === "http:" || u.protocol === "https:");
 
   if (canonical || localDev) return value;
@@ -90,16 +95,37 @@ function payingFetch() {
 }
 
 // ---------------------------------------------------------------------------
+// Per-call timeout. Without it a stalled oracle (or a hung TCP connection)
+// turns into a stuck MCP tool — Claude Code / Cursor / Windsurf / Continue
+// all dispatch tool calls synchronously and a multi-minute Node default
+// socket timeout bricks the conversation. 30 s covers x402's 402 → sign →
+// settle → JSON round-trip with margin. Greptile P2 (2026-04-27).
+// ---------------------------------------------------------------------------
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+// ---------------------------------------------------------------------------
 // Call an x402 paid endpoint and return the response body plus the settled
 // payment receipt (x-payment-response header) so the agent can log spend.
 // ---------------------------------------------------------------------------
 async function callPaid(path: string, body: unknown): Promise<string> {
   const f = payingFetch();
-  const res = await f(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
+  let res: Response;
+  try {
+    res = await f(`${BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e.name === "AbortError" || e.name === "TimeoutError") {
+      throw new Error(
+        `x402station ${path} timed out after ${DEFAULT_TIMEOUT_MS}ms`,
+      );
+    }
+    throw err;
+  }
   const receipt = res.headers.get("x-payment-response");
 
   // Read body as text first, then parse JSON ONLY when the response is
@@ -121,7 +147,21 @@ async function callPaid(path: string, body: unknown): Promise<string> {
     );
   }
 
-  return JSON.stringify({ result: data, payment_receipt: receipt }, null, 2);
+  // Decode the receipt header so audit code can read transaction/network/
+  // payer rather than a base64 blob. If decode fails (proxy stripped
+  // base64, or the header is malformed), surface { raw, malformed: true }
+  // so spend-auditing branches can detect the mismatch instead of
+  // silently consuming a stub. Greptile P2 (2026-04-27).
+  let payment_receipt: unknown = null;
+  if (receipt) {
+    try {
+      payment_receipt = JSON.parse(atob(receipt));
+    } catch {
+      payment_receipt = { raw: receipt, malformed: true };
+    }
+  }
+
+  return JSON.stringify({ result: data, payment_receipt }, null, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +174,22 @@ async function callFree(
   method: "GET" | "DELETE",
   secret: string,
 ): Promise<string> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: { "x-x402station-secret": secret },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: { "x-x402station-secret": secret },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e.name === "AbortError" || e.name === "TimeoutError") {
+      throw new Error(
+        `x402station ${method} ${path} timed out after ${DEFAULT_TIMEOUT_MS}ms`,
+      );
+    }
+    throw err;
+  }
   const raw = await res.text();
   if (!res.ok) {
     const snippet = raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
@@ -159,7 +211,7 @@ async function callFree(
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "x402station",
-  version: "1.0.4",
+  version: "1.0.6",
 });
 
 server.registerTool(
@@ -266,8 +318,12 @@ server.registerTool(
       webhookUrl: z
         .string()
         .url()
+        .refine((u) => u.startsWith("https://"), {
+          message:
+            "webhookUrl must use HTTPS — HMAC-signed alert payloads must not travel in clear text",
+        })
         .describe(
-          "Where x402station should POST alert payloads. Must be reachable from the public internet.",
+          "Where x402station should POST alert payloads. Must be HTTPS (HMAC-signed payloads must travel encrypted) and reachable from the public internet.",
         ),
       signals: z
         .array(z.enum(VALID_SIGNALS))
