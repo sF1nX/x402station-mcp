@@ -211,7 +211,7 @@ async function callFree(
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "x402station",
-  version: "1.0.6",
+  version: "1.0.7",
 });
 
 server.registerTool(
@@ -274,6 +274,64 @@ server.registerTool(
   async () => {
     try {
       const text = await callPaid("/api/v1/catalog/decoys", {});
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return {
+        isError: true,
+        content: [{ type: "text" as const, text: (err as Error).message }],
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "alternatives",
+  {
+    title: "Routing fallback — siblings to a flagged endpoint",
+    description:
+      "Given a URL flagged by preflight (or a `taskClass` hint), returns up to 5 healthy sibling endpoints in the same provider/domain/category/price-band. Filters out 7-day-dead and 1-hour-erroring candidates; ranks by uptime + latency. Costs $0.005 USDC. Use this immediately after preflight returns ok=false — it answers 'where do I go instead?'. Pass {url} when you have a specific URL the agent was about to pay; pass {taskClass} (e.g. 'llm-completions', 'Inference') when discovering by service category; or both for a richer match.",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .optional()
+        .describe(
+          "URL flagged by preflight (or otherwise rejected). Looked up in the catalog to extract provider / domain / category / price band as match keys.",
+        ),
+      taskClass: z
+        .string()
+        .max(80)
+        .optional()
+        .describe(
+          "Service category hint (e.g. 'llm-completions', 'Inference'). Used as a fallback match key when `url` is unknown to the catalog, OR alone for category-only discovery.",
+        ),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .optional()
+        .describe("Max alternatives to return (1..10, default 5)."),
+    },
+  },
+  async ({ url, taskClass, limit }) => {
+    if (!url && !taskClass) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: "alternatives requires at least one of `url` or `taskClass`.",
+          },
+        ],
+      };
+    }
+    try {
+      const body: Record<string, unknown> = {};
+      if (url) body.url = url;
+      if (taskClass) body.taskClass = taskClass;
+      if (limit !== undefined) body.limit = limit;
+      const text = await callPaid("/api/v1/alternatives", body);
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return {
