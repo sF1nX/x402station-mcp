@@ -175,10 +175,16 @@ async function callFree(
   secret: string,
 ): Promise<string> {
   let res: Response;
+  // The watch routes need x-x402station-secret. The credits-status route
+  // (id-gated, secret-less) doesn't — pass an empty string and we skip the
+  // header so we don't ship "x-x402station-secret: " (could trip a
+  // future strict-validation check).
+  const headers: Record<string, string> = {};
+  if (secret) headers["x-x402station-secret"] = secret;
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       method,
-      headers: { "x-x402station-secret": secret },
+      headers,
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
   } catch (err) {
@@ -211,7 +217,7 @@ async function callFree(
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "x402station",
-  version: "1.0.8",
+  version: "1.0.9",
 });
 
 server.registerTool(
@@ -274,6 +280,53 @@ server.registerTool(
   async () => {
     try {
       const text = await callPaid("/api/v1/catalog/decoys", {});
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return {
+        isError: true,
+        content: [{ type: "text" as const, text: (err as Error).message }],
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "buy_credits",
+  {
+    title: "Buy 1000 prepaid /api/v1/preflight calls ($0.50 = 50% off)",
+    description:
+      "Bulk-prepaid preflight bundle. Pay $0.50 USDC once for 1000 prepaid /api/v1/preflight calls. Effective rate $0.0005/call (50% off the per-call $0.001 tier). Returns { creditId, balance: 1000, expiresAt }. STORE THE creditId — it's the bearer token and is not retrievable later. Pass it via X-Credit-Id header on subsequent /api/v1/preflight calls; on exhaustion (balance=0) or expiry (90 days) the middleware falls through to per-call x402 automatically. Use this once you've decided to do high-volume preflight work.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const text = await callPaid("/api/v1/credits", {});
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return {
+        isError: true,
+        content: [{ type: "text" as const, text: (err as Error).message }],
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "credits_status",
+  {
+    title: "Read a credit's current balance + expiry",
+    description:
+      "Free, no payment required. Returns { creditId, balance, initialBalance, used, paidAmount, createdAt, expiresAt, expired, paymentTx, paymentNetwork }. UUID-only access — anyone holding the creditId can read state, same as decrement. 404 covers both 'malformed UUID' and 'no such credit' (same body so an attacker scraping random UUIDs can't tell them apart).",
+    inputSchema: {
+      creditId: z
+        .string()
+        .uuid()
+        .describe("The creditId UUID returned by buy_credits."),
+    },
+  },
+  async ({ creditId }) => {
+    try {
+      const text = await callFree(`/api/v1/credits/${creditId}`, "GET", "");
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
       return {
