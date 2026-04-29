@@ -32,7 +32,12 @@ import { privateKeyToAccount } from "viem/accounts";
 // or replay payment payloads.
 function resolveBaseUrl(raw: string | undefined): string {
   const fallback = "https://x402station.io";
-  const value = (raw ?? fallback).replace(/\/+$/, "");
+  // .trim() before slash-strip — env values pasted from a `.env` file
+  // sometimes carry leading/trailing whitespace which would otherwise make
+  // `new URL(" https://...")` throw, leaving the operator with a confusing
+  // URL-parse error instead of a clean canonical-host check. Audit
+  // 2026-04-28 (Sonnet MEDIUM on mcp-adapter).
+  const value = (raw ?? fallback).trim().replace(/\/+$/, "");
 
   let u: URL;
   try {
@@ -62,6 +67,100 @@ function resolveBaseUrl(raw: string | undefined): string {
     `X402STATION_BASE_URL must be https://x402station.io or a localhost dev URL; got "${value}". ` +
       "Refusing to sign x402 payments against an unknown host — it could replay or harvest payload data.",
   );
+}
+
+// Pure (no DNS) host check for `webhookUrl` on watch_subscribe. Fails fast
+// LOCAL when the operator passes a private/loopback/cloud-metadata host,
+// before the call reaches our server (which has its own SSRF guard at
+// /api/v1/watch — but a 400 round-trip would burn UX in copy-paste dev
+// flows). Mirrors the server-side ranges from src/ssrf-guard.ts; client-
+// side defense-in-depth. Audit-2026-04-29 recon-7 HIGH-8.
+//
+// IPv4 ranges blocked: this-network 0/8, RFC1918 (10/8, 172.16/12,
+// 192.168/16), loopback 127/8, link-local + cloud metadata 169.254/16,
+// IETF reserved 192.0.0/24, CGNAT/Tailscale 100.64/10, multicast 224/4.
+//
+// IPv6: loopback ::1, unspec ::, link-local fe80::/10, ULA fc00::/7,
+// multicast ff00::/8, v4-mapped/v4-compat (low 32 bits could be private),
+// NAT64 64:ff9b::/96 + local-use 64:ff9b:1::/48, RFC 6666 discard 100::/64,
+// 6to4 2002::/16, Teredo 2001::/32, doc 2001:db8::/32 + 3fff::/20,
+// benchmarking 2001:2::/48, SRv6 5f00::/16. Pattern-match on the lowercased
+// hostname for prefix-based ranges; not a full bit-CIDR (good-enough for
+// client-side early rejection — server has the canonical guard).
+function isPrivateIPv4(ip: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!m) return false;
+  const a = Number.parseInt(m[1]!, 10);
+  const b = Number.parseInt(m[2]!, 10);
+  const c = Number.parseInt(m[3]!, 10);
+  const d = Number.parseInt(m[4]!, 10);
+  if ([a, b, c, d].some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true; // malformed → block
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 192 && b === 0 && c === 0) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+function isPrivateIPv6(host: string): boolean {
+  let h = host.toLowerCase();
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  if (h === "::" || h === "::1") return true;
+  if (/^fe[89ab]/.test(h)) return true;
+  if (/^f[cd]/.test(h)) return true;
+  if (/^ff/.test(h)) return true;
+  if (h.startsWith("::ffff:")) return true;
+  if (h.startsWith("::") && h.length > 2 && /^::[0-9a-f]/.test(h)) return true;
+  if (h.startsWith("64:ff9b:")) return true;
+  if (h.startsWith("100:")) return true;
+  if (h.startsWith("2001:db8")) return true;
+  if (/^3fff/.test(h)) return true;
+  if (h.startsWith("2001:2:") || h.startsWith("2001:0002:")) return true;
+  if (h.startsWith("5f00:")) return true;
+  if (h.startsWith("2002:")) return true;
+  if (h.startsWith("2001::") || /^2001:0+:/.test(h)) return true;
+  return false;
+}
+
+const LOCALHOST_NAMES = new Set(["localhost", "localhost.localdomain"]);
+
+/**
+ * Returns the rejection reason as a string when `rawUrl` should be refused,
+ * or `null` when the URL is acceptable for use as a webhookUrl. Plain
+ * `string | null` (not a discriminated union) so dts emits in downstream
+ * SDK packages don't trip on TS narrowing inside zod superRefine blocks.
+ */
+export function validateWebhookUrl(rawUrl: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return "invalid URL";
+  }
+  if (u.protocol !== "https:") {
+    return "webhookUrl must use HTTPS — HMAC-signed alert payloads must not travel in clear text";
+  }
+  if (u.username !== "" || u.password !== "") {
+    return "webhookUrl must not contain userinfo (user:pass@host) — known phishing/spoofing vector";
+  }
+  const hostname = u.hostname.toLowerCase();
+  if (LOCALHOST_NAMES.has(hostname)) {
+    return `webhookUrl hostname is loopback (${hostname})`;
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) {
+    if (isPrivateIPv4(hostname)) {
+      return `webhookUrl IPv4 ${hostname} is loopback / private / link-local / cloud-metadata`;
+    }
+  }
+  if (hostname.startsWith("[")) {
+    if (isPrivateIPv6(hostname)) {
+      return `webhookUrl IPv6 ${hostname} is loopback / ULA / link-local / v4-mapped / NAT64`;
+    }
+  }
+  return null;
 }
 
 const BASE_URL = resolveBaseUrl(process.env.X402STATION_BASE_URL);
@@ -136,7 +235,14 @@ async function callPaid(path: string, body: unknown): Promise<string> {
   const raw = await res.text();
   if (!res.ok) {
     const snippet = raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
-    throw new Error(`x402station ${path} returned ${res.status}: ${snippet}`);
+    // If the receipt header is set, settlement happened upstream — surface
+    // that so the agent doesn't retry quickly and double-charge. The body
+    // (if JSON-parseable) likely already carries `payment_settled: true`
+    // for routes that adopted the audit-2026-04-28 pattern; we mention
+    // the receipt presence on the error message itself for the older 503
+    // shapes too. Audit 2026-04-28 (Sonnet HIGH-2 on mcp-adapter).
+    const settled = receipt ? " (PAYMENT SETTLED — do NOT retry quickly)" : "";
+    throw new Error(`x402station ${path} returned ${res.status}${settled}: ${snippet}`);
   }
   let data: unknown;
   try {
@@ -152,12 +258,23 @@ async function callPaid(path: string, body: unknown): Promise<string> {
   // base64, or the header is malformed), surface { raw, malformed: true }
   // so spend-auditing branches can detect the mismatch instead of
   // silently consuming a stub. Greptile P2 (2026-04-27).
+  //
+  // 4 KB size cap before atob (audit 2026-04-28 / Sonnet HIGH on
+  // mcp-adapter). Real receipts are <512 bytes; 4 KB is generous. Without
+  // the cap, a malicious / misconfigured proxy attaching a multi-megabyte
+  // blob would force an OOM in this single-threaded MCP process and drop
+  // the stdio transport silently.
+  const RECEIPT_MAX_LEN = 4096;
   let payment_receipt: unknown = null;
   if (receipt) {
-    try {
-      payment_receipt = JSON.parse(atob(receipt));
-    } catch {
-      payment_receipt = { raw: receipt, malformed: true };
+    if (receipt.length > RECEIPT_MAX_LEN) {
+      payment_receipt = { raw: receipt.slice(0, 64) + "…", malformed: true, oversize: true };
+    } else {
+      try {
+        payment_receipt = JSON.parse(atob(receipt));
+      } catch {
+        payment_receipt = { raw: receipt, malformed: true };
+      }
     }
   }
 
@@ -217,7 +334,7 @@ async function callFree(
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "x402station",
-  version: "1.0.9",
+  version: "1.0.10",
 });
 
 server.registerTool(
@@ -347,6 +464,10 @@ server.registerTool(
       since: z
         .string()
         .datetime()
+        .refine(
+          (s) => new Date(s).getTime() <= Date.now() + 60_000,
+          { message: "`since` cannot be in the future (server allows 60s clock-skew slack)" },
+        )
         .optional()
         .describe(
           "ISO 8601 timestamp. Default = now() - 24h. Cannot be older than 30 days or in the future.",
@@ -392,7 +513,9 @@ server.registerTool(
         ),
       taskClass: z
         .string()
+        .min(1)
         .max(80)
+        .regex(/\S/, "taskClass must contain at least one non-whitespace char")
         .optional()
         .describe(
           "Service category hint (e.g. 'llm-completions', 'Inference'). Used as a fallback match key when `url` is unknown to the catalog, OR alone for category-only discovery.",
@@ -468,12 +591,14 @@ server.registerTool(
       webhookUrl: z
         .string()
         .url()
-        .refine((u) => u.startsWith("https://"), {
-          message:
-            "webhookUrl must use HTTPS — HMAC-signed alert payloads must not travel in clear text",
+        .superRefine((u, ctx) => {
+          const reason = validateWebhookUrl(u);
+          if (reason !== null) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: reason });
+          }
         })
         .describe(
-          "Where x402station should POST alert payloads. Must be HTTPS (HMAC-signed payloads must travel encrypted) and reachable from the public internet.",
+          "Where x402station should POST alert payloads. Must be HTTPS, reachable from the public internet, and contain no userinfo (no user:pass@host). Loopback (127.0.0.1, ::1, localhost), private (RFC1918, link-local 169.254/16 incl. cloud metadata, CGNAT/Tailscale 100.64/10) and IPv6 ULA / multicast / NAT64 / 6to4 / Teredo hosts are rejected client-side; the server applies the same SSRF guard if you bypass this check.",
         ),
       signals: z
         .array(z.enum(VALID_SIGNALS))
