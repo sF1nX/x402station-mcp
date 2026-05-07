@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+.npmignore
+*.log
+.env
+.env.*
+README.md
+LICENSE
+src
+tsconfig.json
+package-lock.json
+server.json
+examples
