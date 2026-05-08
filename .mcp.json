@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "x402station": {
+      "command": "npx",
+      "args": ["-y", "x402station-mcp"],
+      "env": {
+        "AGENT_PRIVATE_KEY": ""
+      }
+    }
+  }
+}
