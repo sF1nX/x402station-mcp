@@ -1,3 +1,5 @@
+[![Glama MCP server score](https://glama.ai/mcp/servers/sF1nX/x402station-mcp/badges/score.svg)](https://glama.ai/mcp/servers/@sF1nX/x402station-mcp)
+
 # x402station-mcp
 
 MCP adapter for the [x402station](https://x402station.io) pre-flight oracle. Gives any agent speaking the Model Context Protocol a `preflight`, `forensics`, and `catalog_decoys` tool, so it can check x402 endpoints for **decoys, zombie services, and price traps** before paying them.
