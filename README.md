@@ -2,9 +2,9 @@
 
 # x402station-mcp
 
-MCP adapter for the [x402station](https://x402station.io) pre-flight oracle. Gives any agent speaking the Model Context Protocol a `preflight`, `forensics`, and `catalog_decoys` tool, so it can check x402 endpoints for **decoys, zombie services, and price traps** before paying them.
+MCP adapter for **[x402station.io](https://x402station.io)** — **infrastructure for x402 agentic commerce**. Exposes Preflight by x402station.io (the active flagship product, Evaluate direction) plus tools across all six capability directions: Discover (Catalog), Evaluate (Preflight), Pay (Credits), Monitor (Watch), Recover (Alternatives), Analyze (Forensics). Any agent speaking the Model Context Protocol gets one-call safety before signing `PAYMENT-SIGNATURE` — flags **decoys, zombie services, dead endpoints, and price traps** before paying them.
 
-x402station independently probes every endpoint listed on agentic.market (20k+ endpoints, every 10 minutes) — it sees what facilitator-based monitors can't, including the ~161 endpoints priced ≥ $1,000 USDC that function as anti-scraper honeypots.
+x402station.io independently probes every endpoint listed on agentic.market every 10 minutes — it sees what facilitator-based monitors can't, including endpoints priced ≥ $1,000 USDC that function as anti-scraper honeypots.
 
 ## Install
 
@@ -96,6 +96,7 @@ For bulk discovery, do `catalog_decoys()` once per day and treat the result as a
 - Oracle: https://x402station.io
 - Manifest: https://x402station.io/.well-known/x402
 - OpenAPI: https://x402station.io/api/openapi.json
+- Dataset: https://huggingface.co/datasets/x402station/preflight-dataset-v0_1
 - GitHub: https://github.com/sF1nX/x402station-mcp
 - x402 spec: https://x402.org
 

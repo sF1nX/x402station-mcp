@@ -2,7 +2,7 @@
   "name": "x402station-mcp",
   "version": "1.0.10",
   "mcpName": "io.github.sF1nX/x402station",
-  "description": "MCP adapter for x402station — gives any agent (Claude Code / Cursor / Windsurf / Continue) preflight + forensics + decoy-blacklist + watch-subscription tools for safely paying x402 endpoints.",
+  "description": "MCP adapter for x402station.io — infrastructure for x402 agentic commerce. Exposes Preflight by x402station.io plus Forensics / Catalog / Alternatives / Credits / Watch tools for safe x402 payments.",
   "type": "module",
   "bin": {
     "x402station-mcp": "dist/index.js"

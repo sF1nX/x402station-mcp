@@ -12,7 +12,7 @@
 FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="x402station-mcp"
-LABEL org.opencontainers.image.description="MCP adapter for x402station — pre-flight oracle for x402 endpoints"
+LABEL org.opencontainers.image.description="MCP adapter for x402station.io — infrastructure for x402 agentic commerce"
 LABEL org.opencontainers.image.url="https://x402station.io"
 LABEL org.opencontainers.image.source="https://github.com/sF1nX/x402station-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
