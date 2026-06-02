@@ -2,9 +2,11 @@
 
 # x402station-mcp
 
-MCP adapter for **[x402station.io](https://x402station.io)** — **infrastructure for x402 agentic commerce**. Exposes Preflight by x402station.io (the active flagship product, Evaluate direction) plus tools across all six capability directions: Discover (Catalog), Evaluate (Preflight), Pay (Credits), Monitor (Watch), Recover (Alternatives), Analyze (Forensics). Any agent speaking the Model Context Protocol gets one-call safety before signing `PAYMENT-SIGNATURE` — flags **decoys, zombie services, dead endpoints, and price traps** before paying them.
+<!-- mcp-name: io.github.sF1nX/x402station -->
 
-x402station.io independently probes every endpoint listed on agentic.market every 10 minutes — it sees what facilitator-based monitors can't, including endpoints priced ≥ $1,000 USDC that function as anti-scraper honeypots.
+MCP adapter for **[x402station.io](https://x402station.io)**, the **independent risk-signal layer for x402 agentic commerce**. Exposes Preflight by x402station.io plus Forensics, Catalog Decoys, Alternatives, Credits, Watch, and Whats New. Any agent speaking the Model Context Protocol gets endpoint evidence before signing `PAYMENT-SIGNATURE` — **decoy, zombie, price-trap, never-paid, latency, signature/settlement checks** — before paying.
+
+x402station.io independently probes every endpoint listed on agentic.market every 10 minutes and merges probe history with CDP settlement data. Policy engines decide and enforce; x402station.io measures and reports. We do not route, take custody, or endorse.
 
 ## Install
 
@@ -16,7 +18,7 @@ npm install -g x402station-mcp
 
 ## Configure
 
-The adapter charges real USDC per call (via x402 itself — our oracle is dogfooded). You need a wallet private key that holds Base Sepolia USDC (or Base mainnet once we switch).
+The adapter charges real USDC per paid call through x402 itself. You need a wallet private key that holds Base mainnet USDC.
 
 ### Claude Code
 
@@ -44,10 +46,8 @@ Same shape — every MCP host understands `command` / `args` / `env`. See your t
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `AGENT_PRIVATE_KEY` | **yes** for any tool call | — | 0x-prefixed 64-hex-char private key. Account must hold Base Sepolia USDC. |
+| `AGENT_PRIVATE_KEY` | **yes** for any paid tool call | — | 0x-prefixed 64-hex-char private key. Account must hold Base mainnet USDC. |
 | `X402STATION_BASE_URL` | no | `https://x402station.io` | Override for dev / testing. |
-
-Testnet USDC for the wallet: [faucet.circle.com](https://faucet.circle.com) (pick Base Sepolia).
 
 ## Tools
 
@@ -68,7 +68,7 @@ Ask whether it's safe to pay this x402 URL. Returns:
 }
 ```
 
-`ok` is `true` only when no critical warning fires. Warnings: `unknown_endpoint`, `no_history`, `dead`, `zombie`, `decoy_price_extreme`, `suspicious_high_price`, `slow`, `new_provider`.
+`ok` is `true` only when no critical warning fires. Warnings include `unknown_endpoint`, `no_history`, `dead`, `zombie`, `decoy_price_extreme`, `never_paid_zombie`, `proxy_markup`, `wildcard_402`, `spa_fallback`, `suspicious_high_price`, `slow`, and `new_provider`.
 
 ### `forensics(url)` — $0.001 USDC
 
@@ -106,7 +106,7 @@ agent intent: pay some_endpoint.com
 
 ## Links
 
-- Oracle: https://x402station.io
+- Service: https://x402station.io
 - Manifest: https://x402station.io/.well-known/x402
 - OpenAPI: https://x402station.io/api/openapi.json
 - Dataset: https://huggingface.co/datasets/x402station/preflight-dataset-v0_1

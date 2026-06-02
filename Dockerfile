@@ -12,11 +12,11 @@
 FROM node:20-alpine
 
 LABEL org.opencontainers.image.title="x402station-mcp"
-LABEL org.opencontainers.image.description="MCP adapter for x402station.io — infrastructure for x402 agentic commerce"
+LABEL org.opencontainers.image.description="MCP adapter for x402station.io independent risk-signal layer"
 LABEL org.opencontainers.image.url="https://x402station.io"
 LABEL org.opencontainers.image.source="https://github.com/sF1nX/x402station-mcp"
 LABEL org.opencontainers.image.licenses="MIT"
 
-RUN npm install -g x402station-mcp@1.0.10
+RUN npm install -g x402station-mcp@1.0.11
 
 ENTRYPOINT ["x402station-mcp"]

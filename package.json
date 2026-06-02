@@ -1,8 +1,8 @@
 {
   "name": "x402station-mcp",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "mcpName": "io.github.sF1nX/x402station",
-  "description": "MCP adapter for x402station.io — infrastructure for x402 agentic commerce. Exposes Preflight by x402station.io plus Forensics / Catalog / Alternatives / Credits / Watch tools for safe x402 payments.",
+  "description": "MCP adapter for x402station.io, the independent risk-signal layer for x402 agentic commerce: endpoint evidence before an agent authorizes payment.",
   "type": "module",
   "bin": {
     "x402station-mcp": "dist/index.js"
@@ -37,9 +37,18 @@
     "mcp",
     "model-context-protocol",
     "agent",
-    "oracle",
+    "risk-signals",
+    "endpoint-risk",
+    "x402-risk",
     "preflight",
+    "payment-signature",
+    "autopay-safety",
+    "scam-detection",
     "decoy-detection",
+    "zombie-detection",
+    "price-trap",
+    "never-paid",
+    "trust-score",
     "agentic-commerce",
     "x402station"
   ],
@@ -48,7 +57,7 @@
   "homepage": "https://x402station.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sF1nX/x402station-mcp.git"
+    "url": "git+https://github.com/sF1nX/x402station-mcp.git"
   },
   "bugs": {
     "url": "https://github.com/sF1nX/x402station-mcp/issues"

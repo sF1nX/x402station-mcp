@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// x402station-mcp — MCP adapter that exposes the x402station pre-flight oracle
+// x402station-mcp — MCP adapter that exposes Preflight by x402station.io
 // (preflight / forensics / catalog_decoys) as tools to agents speaking the
 // Model Context Protocol (Claude Code, Cursor, Windsurf, Continue, ...).
 //
@@ -9,8 +9,7 @@
 //
 // Config via env:
 //   AGENT_PRIVATE_KEY   (required for real calls) 0x-prefixed 64-hex chars.
-//                        Must hold USDC on the network x402station is
-//                        currently live on (Base Sepolia by default).
+//                        Must hold Base mainnet USDC for paid tool calls.
 //   X402STATION_BASE_URL (optional) default "https://x402station.io".
 //                        Useful for testing against a local dev server.
 //
@@ -28,7 +27,7 @@ import { privateKeyToAccount } from "viem/accounts";
 // Allow-list for the BASE_URL env override. The default canonical host
 // covers 99.9% of users. We accept an override only for local dev servers
 // because otherwise a malicious config could redirect the agent's signed
-// X-PAYMENT request to an attacker-controlled host and harvest telemetry
+// PAYMENT-SIGNATURE request to an attacker-controlled host and harvest telemetry
 // or replay payment payloads.
 function resolveBaseUrl(raw: string | undefined): string {
   const fallback = "https://x402station.io";
@@ -194,7 +193,7 @@ function payingFetch() {
 }
 
 // ---------------------------------------------------------------------------
-// Per-call timeout. Without it a stalled oracle (or a hung TCP connection)
+// Per-call timeout. Without it a stalled risk-signal call (or a hung TCP connection)
 // turns into a stuck MCP tool — Claude Code / Cursor / Windsurf / Continue
 // all dispatch tool calls synchronously and a multi-minute Node default
 // socket timeout bricks the conversation. 30 s covers x402's 402 → sign →
@@ -333,16 +332,16 @@ async function callFree(
 // Server wiring
 // ---------------------------------------------------------------------------
 const server = new McpServer({
-  name: "x402station",
-  version: "1.0.10",
+  name: "x402station.io",
+  version: "1.0.11",
 });
 
 server.registerTool(
   "preflight",
   {
-    title: "Pre-flight safety check",
+    title: "Preflight risk check",
     description:
-      "Ask x402station whether a given x402 URL is safe to pay. Returns {ok, warnings[], metadata}. Costs $0.001 USDC (auto-signed with AGENT_PRIVATE_KEY). Call this BEFORE any other paid x402 request to avoid decoys (price ≥ $1k), zombie services, and dead endpoints. `ok:true` only when no critical warning fires.",
+      "Preflight x402 scam check: endpoint risk before you pay — decoy / zombie / price-trap / never-paid? Trust verdict in ~200ms before PAYMENT-SIGNATURE.",
     inputSchema: {
       url: z
         .string()
@@ -368,7 +367,7 @@ server.registerTool(
   {
     title: "7-day forensics report",
     description:
-      "Deep history for one x402 endpoint: hourly uptime over 7 days, latency p50/p90/p99, status-code distribution, concentration-group stats (how crowded this provider's namespace is), and a decoy probability score [0, 1]. Costs $0.001 USDC. Superset of preflight — if you're running forensics you don't need preflight too.",
+      "Forensic x402 scam/risk report for a suspicious endpoint: probe history, signatures, decoy / price-trap patterns.",
     inputSchema: {
       url: z.string().url().describe("The full URL of the x402 endpoint to analyse."),
     },
@@ -391,7 +390,7 @@ server.registerTool(
   {
     title: "Full decoy / zombie blacklist",
     description:
-      "Returns every active x402 endpoint currently flagged decoy_price_extreme / zombie / dead_7d / mostly_dead in one JSON payload, plus per-reason counts. Costs $0.005 USDC. Pull periodically (hourly/daily) and cache locally as a blacklist — cheaper than preflighting every URL.",
+      "Searchable catalog of x402 endpoint risk signals; scam-like decoys, zombies, and price-traps flagged.",
     inputSchema: {},
   },
   async () => {
@@ -410,9 +409,9 @@ server.registerTool(
 server.registerTool(
   "buy_credits",
   {
-    title: "Buy 1000 prepaid /api/v1/preflight calls ($0.50 = 50% off)",
+    title: "Buy prepaid preflight credits",
     description:
-      "Bulk-prepaid preflight bundle. Pay $0.50 USDC once for 1000 prepaid /api/v1/preflight calls. Effective rate $0.0005/call (50% off the per-call $0.001 tier). Returns { creditId, balance: 1000, expiresAt }. STORE THE creditId — it's the bearer token and is not retrievable later. Pass it via X-Credit-Id header on subsequent /api/v1/preflight calls; on exhaustion (balance=0) or expiry (90 days) the middleware falls through to per-call x402 automatically. Use this once you've decided to do high-volume preflight work.",
+      "Prepaid credit pack for high-frequency x402 scam checks, preflight, and verified calls. Returns { creditId, balance, expiresAt }; use X-Credit-Id on subsequent preflight calls.",
     inputSchema: {},
   },
   async () => {
@@ -502,7 +501,7 @@ server.registerTool(
   {
     title: "Routing fallback — siblings to a flagged endpoint",
     description:
-      "Given a URL flagged by preflight (or a `taskClass` hint), returns up to 5 healthy sibling endpoints in the same provider/domain/category/price-band. Filters out 7-day-dead and 1-hour-erroring candidates; ranks by uptime + latency. Costs $0.005 USDC. Use this immediately after preflight returns ok=false — it answers 'where do I go instead?'. Pass {url} when you have a specific URL the agent was about to pay; pass {taskClass} (e.g. 'llm-completions', 'Inference') when discovering by service category; or both for a richer match.",
+      "Avoid paying unsafe x402 endpoints: ranked safe alternatives for the same capability.",
     inputSchema: {
       url: z
         .string()
@@ -582,7 +581,7 @@ server.registerTool(
   {
     title: "Subscribe to webhook alerts on x402 endpoint state changes",
     description:
-      "Pay $0.01 USDC for a 30-day watch + 100 prepaid alerts on one x402 endpoint. When subscribed signals fire or clear (e.g. endpoint goes zombie, price flips to decoy_price_extreme), x402station POSTs a JSON payload signed with HMAC-SHA256 to your webhookUrl. Returns watchId + secret — STORE THE SECRET, it's the HMAC seed for verifying delivery payloads and is not retrievable later. signals defaults to the critical preflight subset {dead, zombie, decoy_price_extreme}; pass other names to subscribe to non-critical signals too.",
+      "Monitor x402 endpoint risk; webhook on scam-like decoy / zombie / price-trap status changes. Returns watchId + secret; x402station.io posts HMAC-SHA256-signed JSON when subscribed signals fire or clear.",
     inputSchema: {
       url: z
         .string()
