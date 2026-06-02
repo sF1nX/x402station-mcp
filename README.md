@@ -91,6 +91,19 @@ agent wants data from some_endpoint.com
 
 For bulk discovery, do `catalog_decoys()` once per day and treat the result as a set-difference against any URLs you're about to hit.
 
+## Composes with
+
+x402station checks whether the **endpoint** is safe (decoy / zombie / price-trap / never-paid) before an agent pays. It pairs naturally with a **payload** safety check — screening the payment metadata for PII before signing:
+
+```
+agent intent: pay some_endpoint.com
+    ├─ x402station    preflight(url)              ← is the ENDPOINT safe?
+    ├─ presidio-x402  screen_payment_metadata()   ← is the PAYLOAD safe?
+    └─ pay()
+```
+
+[`presidio-hardened-x402-mcp`](https://github.com/presidio-v/presidio-hardened-x402-mcp) screens payment metadata for PII before signing. The two servers are developed independently, on purpose — keeping the signals uncorrelated is the point. This is a composition pointer, not an endorsement; see their repo for the screening tool's behaviour and limits.
+
 ## Links
 
 - Oracle: https://x402station.io
